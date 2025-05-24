@@ -1,37 +1,12 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { FiSend, FiPaperclip, FiMic, FiWifi, FiWifiOff, FiSettings, FiSmile } from "react-icons/fi";
+import { FiSend, FiPaperclip, FiMic } from "react-icons/fi";
 import Sidebar from "../Components/SideBar";
 import Header from "../Components/Header";
 import ChatBubble from "../Components/ChatBubble";
 import useTheme from "../hooks/theme";
-
-class ErrorBoundary extends React.Component {
-  state = { hasError: false, error: null };
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-  // dark bg : #282828, dark text : #ECECF1
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="p-4 text-center text-red-400">
-          <h3 className="text-lg font-semibold">Something went wrong</h3>
-          <p className="text-sm">{this.state.error?.message || "Unknown error"}</p>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null })}
-            className="mt-2 px-4 py-2 bg-[#7B54D3] text-white rounded-md hover:bg-[#6B46C1]"
-          >
-            Try Again
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
+import alicelogo from "../../assets/Alice-logo.png";
 
 const MainPage = () => {
   const isLoggedIn = !!localStorage.getItem("token");
@@ -44,12 +19,10 @@ const MainPage = () => {
   const [chatHistory, setChatHistory] = useState([]);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editText, setEditText] = useState("");
   const [chatTitle, setChatTitle] = useState("New Chat");
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [connectionError, setConnectionError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -74,7 +47,7 @@ const MainPage = () => {
       setConnectionError(null);
       setIsLoading(false);
       reconnectAttempts.current = 0;
-      addBotMessage("Hello! I'm your Alice AI assistant. How can I help you today?");
+      // Remove addBotMessage here to avoid duplicate welcome message
     };
 
     socket.onmessage = (event) => {
@@ -88,27 +61,46 @@ const MainPage = () => {
       }
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       setConnectionStatus("disconnected");
       setIsLoading(false);
+      // WebSocket close codes 1006 and 1005 often mean network failure or server unreachable
       if (hasConnected && reconnectAttempts.current < maxReconnectAttempts) {
-        addBotMessage(`Connection lost. Reconnecting (${reconnectAttempts.current + 1}/${maxReconnectAttempts})...`);
+        addBotMessage(
+          `Connection lost. Reconnecting (${
+            reconnectAttempts.current + 1
+          }/${maxReconnectAttempts})...`
+        );
         setTimeout(() => {
           reconnectAttempts.current += 1;
           connectWebSocket();
         }, 3000);
       } else if (hasConnected) {
-        setConnectionError("Failed to reconnect to server. Please check your connection.");
+        setConnectionError(
+          "Failed to reconnect to server. Please check your connection."
+        );
+      } else {
+        // Initial connection failed (probably server down)
+        setConnectionError("Network error, please try again.");
       }
     };
 
     socket.onerror = (error) => {
       setConnectionStatus("disconnected");
       setIsLoading(false);
-      setConnectionError("WebSocket error. Please ensure the server is running.");
+      if (!hasConnected) {
+        // Connection attempt failed — network/server probably down
+        setConnectionError("Network error, please try again.");
+      } else {
+        // Some other error after connection established
+        setConnectionError(
+          "WebSocket error occurred. Please check your connection."
+        );
+      }
       console.error("WebSocket error:", error);
     };
   }, [hasConnected]);
+  
 
   useEffect(() => {
     if (!isLoggedIn && msg.trim() !== "") {
@@ -151,7 +143,10 @@ const MainPage = () => {
   }, [connectWebSocket]);
 
   const addMessage = (from, text, id = Date.now(), reactions = []) => {
-    setChat((prev) => [...prev, { id, from, text, timestamp: new Date(), reactions }]);
+    setChat((prev) => [
+      ...prev,
+      { id, from, text, timestamp: new Date(), reactions },
+    ]);
   };
 
   const addBotMessage = (text) => addMessage("bot", text);
@@ -160,7 +155,9 @@ const MainPage = () => {
     if (activeChat) {
       setChatHistory((prev) =>
         prev.map((chat) =>
-          chat.id === activeChat ? { ...chat, lastMessage: message, timestamp: new Date() } : chat
+          chat.id === activeChat
+            ? { ...chat, lastMessage: message, timestamp: new Date() }
+            : chat
         )
       );
     }
@@ -182,12 +179,14 @@ const MainPage = () => {
   const sendMessage = (messageToSend = null) => {
     stopListening();
     const text = messageToSend !== null ? messageToSend : msg;
-    if (!text.trim() || connectionStatus !== "connected" || !socketRef.current) return;
+    if (!text.trim() || connectionStatus !== "connected" || !socketRef.current)
+      return;
 
-    socketRef.current.send(JSON.stringify({ user_id: 2090364640, message: text }));
+    socketRef.current.send(
+      JSON.stringify({ user_id: 2090364640, message: text })
+    );
     addMessage("user", text);
     setMsg("");
-    setShowEmojiPicker(false);
     setIsTyping(true);
     inputRef.current?.focus();
 
@@ -239,7 +238,8 @@ const MainPage = () => {
   };
 
   const handleVoiceInput = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("Speech Recognition not supported");
       return;
@@ -278,7 +278,9 @@ const MainPage = () => {
     setChat([]);
     setActiveChat(null);
     setChatTitle("New Chat");
-    addBotMessage("Hello! I'm your Alice AI assistant. What would you like to discuss?");
+    addBotMessage(
+      "Hello! I'm your Alice AI assistant. What would you like to discuss?"
+    );
   };
 
   const loadChat = (chatId) => {
@@ -286,7 +288,12 @@ const MainPage = () => {
     const selectedChat = chatHistory.find((c) => c.id === chatId);
     setChatTitle(selectedChat?.title || "Chat");
     setChat([
-      { id: Date.now(), from: "bot", text: `Loading chat ${chatId}...`, timestamp: new Date() },
+      {
+        id: Date.now(),
+        from: "bot",
+        text: `Loading chat ${chatId}...`,
+        timestamp: new Date(),
+      },
       {
         id: Date.now() + 1,
         from: "user",
@@ -313,7 +320,9 @@ const MainPage = () => {
     if (!editText.trim()) return;
     setChat((prev) =>
       prev.map((msg) =>
-        msg.id === editingMessageId ? { ...msg, text: editText, timestamp: new Date() } : msg
+        msg.id === editingMessageId
+          ? { ...msg, text: editText, timestamp: new Date() }
+          : msg
       )
     );
     setEditingMessageId(null);
@@ -336,13 +345,9 @@ const MainPage = () => {
     );
   };
 
-  const toggleSettingsModal = () => {
-    setShowSettings((prev) => !prev);
-  };
-
   useEffect(() => {
     const focusInput = () => {
-      if (!showSettings && !showEmojiPicker) inputRef.current?.focus();
+      inputRef.current?.focus();
     };
 
     focusInput();
@@ -352,85 +357,7 @@ const MainPage = () => {
     return () => {
       inputElement.removeEventListener("blur", focusInput);
     };
-  }, [showSettings, showEmojiPicker]);
-
-  const SettingsModal = ({ onClose }) => (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
-    >
-      <motion.div
-        initial={{ scale: 0.9, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.9, y: 20 }}
-        className="rounded-xl p-6 w-full max-w-md shadow-2xl backdrop-blur-md bg-opacity-80
-                   bg-white text-black dark:bg-gradient-to-br dark:from-[#4C3B8B] dark:to-[#6B46C1] dark:text-white"
-      >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">Settings</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-200 dark:hover:bg-[#5a47a5] rounded-full">
-            <FiX size={24} />
-          </button>
-        </div>
-        <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium">Chat Title</label>
-            <input
-              type="text"
-              value={chatTitle}
-              onChange={(e) => {
-                setChatTitle(e.target.value);
-                if (activeChat) {
-                  setChatHistory((prev) =>
-                    prev.map((chat) =>
-                      chat.id === activeChat ? { ...chat, title: e.target.value } : chat
-                    )
-                  );
-                }
-              }}
-              className="w-full p-3 rounded-md border focus:outline-none transition-colors
-                         bg-gray-100 text-black border-gray-300 focus:ring-2 focus:ring-indigo-400
-                         dark:bg-[#5a47a5] dark:text-white dark:border-gray-600 dark:focus:ring-[#7B54D3]"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Theme</label>
-            <select
-              className="w-full p-3 rounded-md border focus:outline-none transition-colors
-                         bg-gray-100 text-black border-gray-300 focus:ring-2 focus:ring-indigo-400
-                         dark:bg-[#5a47a5] dark:text-white dark:border-gray-600 dark:focus:ring-[#7B54D3]"
-              onChange={(e) => document.documentElement.classList.toggle('dark', e.target.value === 'dark')}
-            >
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Message Font Size</label>
-            <select
-              className="w-full p-3 rounded-md border focus:outline-none transition-colors
-                         bg-gray-100 text-black border-gray-300 focus:ring-2 focus:ring-indigo-400
-                         dark:bg-[#5a47a5] dark:text-white dark:border-gray-600 dark:focus:ring-[#7B54D3]"
-            >
-              <option value="small">Small</option>
-              <option value="medium">Medium</option>
-              <option value="large">Large</option>
-            </select>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-full p-3 font-semibold rounded-md transition-colors
-                       bg-indigo-600 text-white hover:bg-indigo-700
-                       dark:bg-[#7B54D3] dark:hover:bg-[#6B46C1]"
-          >
-            Save
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
+  }, []);
 
   return (
     <div className="h-screen w-screen flex flex-row dark:bg-[#282828]">
@@ -502,14 +429,31 @@ const MainPage = () => {
         <div className="flex-1 flex flex-col overflow-hidden relative">
           {connectionError && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
+              initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="absolute top-0 left-0 right-0 bg-red-500/80 text-white text-center p-2 z-10 backdrop-blur-sm dark:bg-red-700/90 dark:text-gray-100"
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="absolute top-0 left-0 right-0 bg-gradient-to-r from-red-500 to-red-600 text-white text-center p-3 z-10 shadow-lg dark:from-red-600 dark:to-red-700"
             >
-              {connectionError}
+              <div className="flex items-center justify-center space-x-2">
+                <svg
+                  className="w-5 h-5 animate-pulse"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span>Network error please try again</span>
+              </div>
               <button
                 onClick={connectWebSocket}
-                className="ml-2 underline"
+                className="ml-3 px-2 py-1 bg-white text-red-600 rounded-md hover:bg-red-100 transition-colors text-sm font-medium"
                 aria-label="Retry WebSocket connection"
               >
                 Retry
@@ -517,140 +461,153 @@ const MainPage = () => {
             </motion.div>
           )}
           <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white text-black dark:bg-[#282828] dark:text-white">
-            <ErrorBoundary>
-              <div className="max-w-4xl mx-auto w-full space-y-4">
-                <AnimatePresence>
-                  {isLoading && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="text-center py-16"
-                    >
-                      <div className="flex justify-center space-x-2">
-                        <motion.div
-                          className="w-3 h-3 rounded-full bg-[#7B54D3]"
-                          animate={{ y: [-4, 4, -4] }}
-                          transition={{ repeat: Infinity, duration: 0.6 }}
-                        />
-                        <motion.div
-                          className="w-3 h-3 rounded-full bg-[#7B54D3]"
-                          animate={{ y: [-4, 4, -4] }}
-                          transition={{
-                            repeat: Infinity,
-                            duration: 0.6,
-                            delay: 0.2,
-                          }}
-                        />
-                        <motion.div
-                          className="w-3 h-3 rounded-full bg-[#7B54D3]"
-                          animate={{ y: [-4, 4, -4] }}
-                          transition={{
-                            repeat: Infinity,
-                            duration: 0.6,
-                            delay: 0.4,
-                          }}
-                        />
-                      </div>
-                      <div className="text-gray-400 mt-4">Connecting...</div>
-                    </motion.div>
-                  )}
-                  {!isLoading && chat.length === 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.4 }}
-                      className="text-center py-16 bg-[#2a2a2a]/50 backdrop-blur-md rounded-xl shadow-lg"
-                    >
-                      <img
-                        src="https://img.freepik.com/free-vector/hand-drawn-flat-design-anarchy-symbol_23-2149244363.jpg?semt=ais_hybrid&w=740"
-                        alt="Alice AI Logo"
-                        className="w-16 h-16 mx-auto mb-4 rounded-full shadow-md"
+            <div className="max-w-4xl mx-auto w-full space-y-4">
+              <AnimatePresence>
+                {isLoading && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.4 }}
+                    className="text-center py-16"
+                  >
+                    <div className="flex justify-center items-center space-x-3">
+                      <motion.div
+                        className="w-4 h-4 rounded-full bg-gradient-to-br from-[#7B54D3] to-[#A78BFA]"
+                        animate={{
+                          scale: [1, 1.4, 1],
+                          opacity: [0.6, 1, 0.6],
+                        }}
+                        transition={{
+                          duration: 0.8,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                        }}
                       />
-                      <div className="text-4xl font-bold text-[#7B54D3] mb-4">
-                        Alice AI Assistant
-                      </div>
-                      <div className="text-gray-400 max-w-md mx-auto text-lg">
-                        Start a new conversation or select one from the sidebar.
-                      </div>
-                    </motion.div>
-                  )}
-                  {!isLoading &&
-                    chat.map((msg, i) => (
-                      <ChatBubble
-                        key={msg.id}
-                        message={msg}
-                        isConsecutive={i > 0 && chat[i - 1].from === msg.from}
-                        onEdit={handleEditMessage}
-                        onDelete={handleDeleteMessage}
-                        onAddReaction={handleAddReaction}
+                      <motion.div
+                        className="w-4 h-4 rounded-full bg-gradient-to-br from-[#7B54D3] to-[#A78BFA]"
+                        animate={{
+                          scale: [1, 1.4, 1],
+                          opacity: [0.6, 1, 0.6],
+                        }}
+                        transition={{
+                          duration: 0.8,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                          delay: 0.2,
+                        }}
                       />
-                    ))}
-                  {isTyping && (
+                      <motion.div
+                        className="w-4 h-4 rounded-full bg-gradient-to-br from-[#7B54D3] to-[#A78BFA]"
+                        animate={{
+                          scale: [1, 1.4, 1],
+                          opacity: [0.6, 1, 0.6],
+                        }}
+                        transition={{
+                          duration: 0.8,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                          delay: 0.4,
+                        }}
+                      />
+                    </div>
                     <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="flex justify-start items-center space-x-3 p-4 bg-[#2a2a2a]/50 rounded-lg backdrop-blur-sm"
+                      className="text-gray-400 mt-4 text-sm font-medium"
+                      animate={{ opacity: [0.7, 1, 0.7] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
                     >
-                      <img
-                        src="https://img.freepik.com/free-vector/hand-drawn-flat-design-anarchy-symbol_23-2149244363.jpg?semt=ais_hybrid&w=740"
-                        alt="Alice AI"
-                        className="w-6 h-6 rounded-full"
-                      />
-                      <div className="flex space-x-2">
-                        <motion.div
-                          className="w-2 h-2 rounded-full bg-[#7B54D3]"
-                          animate={{ y: [-4, 4, -4] }}
-                          transition={{ repeat: Infinity, duration: 0.6 }}
-                        />
-                        <motion.div
-                          className="w-2 h-2 rounded-full bg-[#7B54D3]"
-                          animate={{ y: [-4, 4, -4] }}
-                          transition={{
-                            repeat: Infinity,
-                            duration: 0.6,
-                            delay: 0.2,
-                          }}
-                        />
-                        <motion.div
-                          className="w-2 h-2 rounded-full bg-[#7B54D3]"
-                          animate={{ y: [-4, 4, -4] }}
-                          transition={{
-                            repeat: Infinity,
-                            duration: 0.6,
-                            delay: 0.4,
-                          }}
-                        />
-                      </div>
-                      <div className="text-sm text-gray-400 italic">
-                        Alice is typing...
-                      </div>
+                      Establishing connection...
                     </motion.div>
-                  )}
-                </AnimatePresence>
-                <div ref={messagesEndRef} />
-              </div>
-            </ErrorBoundary>
+                  </motion.div>
+                )}
+
+                {!isLoading &&
+                  chat.map((msg, i) => (
+                    <ChatBubble
+                      key={msg.id}
+                      message={msg}
+                      isConsecutive={i > 0 && chat[i - 1].from === msg.from}
+                      onEdit={handleEditMessage}
+                      onDelete={handleDeleteMessage}
+                      onAddReaction={handleAddReaction}
+                    />
+                  ))}
+                {isTyping && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 20 }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                    className="flex justify-start items-center space-x-3 p-4"
+                  >
+                    <motion.img
+                      src={alicelogo}
+                      alt="Alice AI"
+                      className="w-6 h-6 rounded-full"
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                    />
+                    <div className="flex space-x-2">
+                      <motion.div
+                        className="w-2 h-2 rounded-full bg-gradient-to-br from-[#7B54D3] to-[#A78BFA]"
+                        animate={{
+                          y: [-4, 4, -4],
+                          opacity: [0.5, 1, 0.5],
+                        }}
+                        transition={{
+                          duration: 0.6,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                        }}
+                      />
+                      <motion.div
+                        className="w-2 h-2 rounded-full bg-gradient-to-br from-[#7B54D3] to-[#A78BFA]"
+                        animate={{
+                          y: [-4, 4, -4],
+                          opacity: [0.5, 1, 0.5],
+                        }}
+                        transition={{
+                          duration: 0.6,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                          delay: 0.2,
+                        }}
+                      />
+                      <motion.div
+                        className="w-2 h-2 rounded-full bg-gradient-to-br from-[#7B54D3] to-[#A78BFA]"
+                        animate={{
+                          y: [-4, 4, -4],
+                          opacity: [0.5, 1, 0.5],
+                        }}
+                        transition={{
+                          duration: 0.6,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                          delay: 0.4,
+                        }}
+                      />
+                    </div>
+                    <motion.div
+                      className="text-sm text-gray-400 italic"
+                      animate={{ opacity: [0.7, 1, 0.7] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                    >
+                      Alice is typing...
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <div ref={messagesEndRef} />
+            </div>
           </div>
 
           {/* Input area */}
-          <div className="p-2 sm:p-3 md:p-4 flex flex-col max-w-4xl mx-auto w-full 
-  backdrop-blur-md
-  text-black dark:text-white 
-  sticky bottom-0 z-10 rounded-3xl">
-
+          <div className="p-2 sm:p-3 md:p-4 flex flex-col max-w-4xl mx-auto w-full backdrop-blur-md text-black dark:text-white sticky bottom-0 z-10 rounded-3xl">
             <div className="flex items-center space-x-1 sm:space-x-2">
-
               <div className="relative flex-grow">
                 <textarea
                   ref={inputRef}
-                  className="w-full resize-none rounded-xl
-        bg-white/90 dark:bg-[#434343]/90 
-        text-black dark:text-white 
-        p-2 sm:p-3 text-sm sm:text-base 
-        focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500
-        transition-colors shadow-md backdrop-blur-sm"
+                  className="w-full resize-none rounded-xl bg-white/90 dark:bg-[#434343]/90 text-black dark:text-white p-2 sm:p-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 transition-colors shadow-md backdrop-blur-sm"
                   rows={editingMessageId ? 2 : 1}
                   style={{
                     minHeight: "40px",
@@ -682,46 +639,33 @@ const MainPage = () => {
 
               <button
                 onClick={handleVoiceInput}
-                className={`
-    p-2 sm:p-2 rounded-full transition-colors 
-    min-w-[32px] sm:min-w-[40px] 
-    text-black dark:text-white
-    focus:outline-none focus:ring-2 
-    focus:ring-gray-400 dark:focus:ring-gray-500
-  `}
+                className="p-2 sm:p-2 rounded-full transition-colors min-w-[32px] sm:min-w-[40px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500"
                 aria-label={isListening ? "Listening..." : "Start voice input"}
                 disabled={isTyping}
               >
                 <FiMic size={18} className="sm:w-6 sm:h-6" />
               </button>
 
-
               <button
-                onClick={editingMessageId ? handleEditSubmit : () => sendMessage()}
-                className={`
-    p-2 sm:p-2 rounded-full transition-colors 
-    min-w-[32px] sm:min-w-[40px] 
-    ${isTyping || !msg.trim()
+                onClick={
+                  editingMessageId ? handleEditSubmit : () => sendMessage()
+                }
+                className={`p-2 sm:p-2 rounded-full transition-colors min-w-[32px] sm:min-w-[40px] ${
+                  isTyping || !msg.trim()
                     ? "text-gray-400 cursor-not-allowed"
                     : "text-black dark:text-white hover:opacity-80"
-                  } 
-    focus:outline-none focus:ring-2 
-    focus:ring-gray-400 dark:focus:ring-gray-500
-  `}
-                aria-label={editingMessageId ? "Submit edited message" : "Send message"}
+                } focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500`}
+                aria-label={
+                  editingMessageId ? "Submit edited message" : "Send message"
+                }
                 disabled={isTyping || !msg.trim()}
               >
                 <FiSend size={18} className="sm:w-6 sm:h-6" />
               </button>
-
-
             </div>
           </div>
         </div>
       </div>
-      <AnimatePresence>
-        {showSettings && <SettingsModal onClose={toggleSettingsModal} />}
-      </AnimatePresence>
     </div>
   );
 };
